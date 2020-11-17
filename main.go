@@ -36,17 +36,12 @@ const Version = "1.0.0"
 
 var (
 	client                = &http.Client{}
-	key                   = flag.String("key", "", "Your cloudflare API key, overrides environment variable CLOUDFLARE_DDNS_KEY")
-	email                 = flag.String("email", "", "Your cloudflare API email, overrides environment variable CLOUDFLARE_DDNS_EMAIL")
-	domain                = flag.String("domain", "", "The domain to update records on, overrides environment variable CLOUDFLARE_DDNS_DOMAIN")
-	subDomain             = flag.String("subdomain", "@", "The subdomain to update records on, overrides environment variable CLOUDFLARE_DDNS_SUBDOMAIN")
 	v6                    = flag.Bool("v6", true, "Controls whether or not to set AAAA record")
 	v4                    = flag.Bool("v4", true, "Controls whether or not to set A record")
 	externalAddressSource = flag.String("external-source", "ifcfg.org", "The external service to use for determining external address, should have v4 and v6 subdomains")
 	externalSourceUseSSL  = flag.Bool("external-source-ssl", true, "Whether to use SSL to connect to the external source for the external address")
 
 	finalKey       string
-	finalEmail     string
 	finalDomain    string
 	finalSubdomain string
 )
@@ -95,24 +90,21 @@ func main() {
 
 	log.Info("Starting cloudflare-ddns v" + Version)
 
-	finalKey = os.Getenv("CLOUDFLARE_DDNS_KEY")
-	if *key != "" {
-		finalKey = *key
+	var ok bool
+	finalKey, ok = os.LookupEnv("CLOUDFLARE_DDNS_KEY")
+	if !ok {
+		log.Panic("You must specify CLOUDFLARE_DDNS_KEY")
 	}
 
-	finalEmail = os.Getenv("CLOUDFLARE_DDNS_EMAIL")
-	if *email != "" {
-		finalEmail = *email
+	finalDomain, ok = os.LookupEnv("CLOUDFLARE_DDNS_DOMAIN")
+	if !ok {
+		log.Panic("You must specify CLOUDFLARE_DDNS_DOMAIN")
 	}
 
-	finalDomain = os.Getenv("CLOUDFLARE_DDNS_DOMAIN")
-	if *domain != "" {
-		finalDomain = *domain
-	}
-
-	finalSubdomain = os.Getenv("CLOUDFLARE_DDNS_SUBDOMAIN")
-	if *subDomain != "" {
-		finalSubdomain = *subDomain
+	finalSubdomain, ok = os.LookupEnv("CLOUDFLARE_DDNS_SUBDOMAIN")
+	if !ok {
+		finalSubdomain = "@"
+		log.Warn("CLOUDFLARE_DDNS_SUBDOMAIN not set, using @")
 	}
 
 	log.Infof("Updating record for %s.%s\n", finalSubdomain, finalDomain)
@@ -137,8 +129,7 @@ func main() {
 // UpdateIP will update the DNS records by determining the external IP address
 func UpdateIP() error {
 	req, _ := http.NewRequest("GET", "https://api.cloudflare.com/client/v4/zones?name="+finalDomain+"&status=active&page=1&per_page=1&order=status&direction=desc&match=all", nil)
-	req.Header.Add("X-Auth-Email", finalEmail)
-	req.Header.Add("X-Auth-Key", finalKey)
+	req.Header.Add("Authorization", "Bearer "+finalKey)
 	req.Header.Add("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
@@ -161,8 +152,7 @@ func UpdateIP() error {
 	id := zList.Result[0].ID
 
 	req, _ = http.NewRequest("GET", "https://api.cloudflare.com/client/v4/zones/"+id+"/dns_records?name="+finalSubdomain+"."+finalDomain+"&page=1&per_page=20&order=type&direction=desc&match=all", nil)
-	req.Header.Add("X-Auth-Key", finalKey)
-	req.Header.Add("X-Auth-Email", finalEmail)
+	req.Header.Add("Authorization", "Bearer "+finalKey)
 	req.Header.Add("Content-Type", "application/json")
 
 	resp, err = client.Do(req)
@@ -201,8 +191,7 @@ func UpdateIP() error {
 func UpdateRecord(zoneID, recordID, recordType, recordName, recordContent string) error {
 	data := []byte(`{"id": "` + recordID + `", "content": "` + recordContent + `", "type": "` + recordType + `", "name": "` + recordName + `", "ttl": 120}`)
 	req, _ := http.NewRequest("PUT", "https://api.cloudflare.com/client/v4/zones/"+zoneID+"/dns_records/"+recordID, bytes.NewBuffer(data))
-	req.Header.Add("X-Auth-Key", finalKey)
-	req.Header.Add("X-Auth-Email", finalEmail)
+	req.Header.Add("Authorization", "Bearer "+finalKey)
 	req.Header.Add("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
