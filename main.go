@@ -25,12 +25,10 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/go-playground/log"
-	"github.com/go-playground/log/handlers/console"
+	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"net/http"
 	"os"
-	"time"
 )
 
 // Version is our current version
@@ -94,9 +92,6 @@ type Error struct {
 
 func main() {
 	flag.Parse()
-	cLog := console.New()
-	cLog.SetTimestampFormat(time.RFC3339)
-	log.RegisterHandler(cLog, log.AllLevels...)
 
 	log.Info("Starting cloudflare-ddns v" + Version)
 
